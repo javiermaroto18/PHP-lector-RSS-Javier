@@ -41,33 +41,37 @@
         require_once "RSSElPais.php";
         require_once "RSSElMundo.php";
         
-        // Función adaptada para usar la conexión de `pg_connect`
+        // Función adaptada para PDO
         function filtros($sql, $link){
-            $result = pg_query($link, $sql);
-            if (!$result) {
-                echo "<tr><td colspan='6'>Error en la consulta: " . pg_last_error($link) . "</td></tr>";
-                return;
-            }
+             try {
+                 // En PDO se usa query() directamente sobre el objeto conexión
+                 $stmt = $link->query($sql);
+                 
+                 // Fetch con PDO::FETCH_ASSOC devuelve un array asociativo
+                 while ($arrayFiltro = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
-            while ($arrayFiltro = pg_fetch_assoc($result)) {
-                echo"<tr>";
-                    echo "<th style='border: 1px #E4CCE8 solid;'>" . ($arrayFiltro['titulo'] ?? '') . "</th>";
-                    echo "<th style='border: 1px #E4CCE8 solid;'>" . ($arrayFiltro['contenido'] ?? '') . "</th>";
-                    echo "<th style='border: 1px #E4CCE8 solid;'>" . ($arrayFiltro['descripcion'] ?? '') . "</th>";
-                    echo "<th style='border: 1px #E4CCE8 solid;'>" . ($arrayFiltro['categoria'] ?? '') . "</th>";
-                    echo "<th style='border: 1px #E4CCE8 solid;'>" . ($arrayFiltro['link'] ?? '') . "</th>";
+                        echo"<tr>";              
+                             echo "<th style='border: 1px #E4CCE8 solid;'>".$arrayFiltro['titulo']."</th>";
+                             echo "<th style='border: 1px #E4CCE8 solid;'>".$arrayFiltro['contenido']."</th>";
+                             echo "<th style='border: 1px #E4CCE8 solid;'>".$arrayFiltro['descripcion']."</th>";                      
+                             echo "<th style='border: 1px #E4CCE8 solid;'>".$arrayFiltro['categoria']."</th>";                       
+                             echo "<th style='border: 1px #E4CCE8 solid;'>".$arrayFiltro['link']."</th>";                     
+                             
+                             // Manejo de fecha seguro
+                             if ($arrayFiltro['fPubli']) {
+                                $fecha = date_create($arrayFiltro['fPubli']);
+                                $fechaConversion = date_format($fecha,'d-M-Y');
+                             } else {
+                                $fechaConversion = "Sin fecha";
+                             }
+                             
+                             echo "<th style='border: 1px #E4CCE8 solid;'>".$fechaConversion."</th>";
+                        echo"</tr>";  
 
-                    // Manejo de fecha seguro (campo en la BD: fpubli)
-                    if (!empty($arrayFiltro['fpubli'])) {
-                        $fecha = date_create($arrayFiltro['fpubli']);
-                        $fechaConversion = $fecha ? date_format($fecha,'d-M-Y') : 'Sin fecha';
-                    } else {
-                        $fechaConversion = "Sin fecha";
-                    }
-
-                    echo "<th style='border: 1px #E4CCE8 solid;'>" . $fechaConversion . "</th>";
-                echo"</tr>";
-            }
+                 }
+             } catch (PDOException $e) {
+                 echo "<tr><td colspan='6'>Error en la consulta: " . $e->getMessage() . "</td></tr>";
+             }
         }
         
         require_once "conexionBBDD.php";
