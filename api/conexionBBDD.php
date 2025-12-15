@@ -1,37 +1,69 @@
 <?php
-// conexionBBDD.php adaptado para Vercel Postgres
+// conexionBBDD.php - Versión Universal para Vercel/Neon Postgres
 
 $Repit = false;
+$link = null;
 
-// 1. Intentamos obtener la URL de la base de datos de Vercel
+// 1. Buscamos la URL de conexión en las variables de entorno (Prioridad: POSTGRES_URL -> DATABASE_URL)
 $db_url = getenv('POSTGRES_URL');
 
 if (!$db_url) {
-    // Si no encuentra la variable, mostramos error (útil para depurar)
-    die("Error crítico: No se ha encontrado la variable de entorno POSTGRES_URL. Asegúrate de haber conectado la base de datos en Vercel.");
+    $db_url = getenv('DATABASE_URL');
 }
 
-// 2. Desglosamos la URL que nos da Vercel para sacar usuario, contraseña, host...
-$db_opts = parse_url($db_url);
-$host = $db_opts["host"];
-$port = $db_opts["port"];
-$user = $db_opts["user"];
-$pass = $db_opts["pass"];
-$dbname = ltrim($db_opts["path"], '/');
+// Si no hay variables de entorno (por ejemplo en pruebas locales), usar valores concretos de Neon.
+// Nota: es preferible configurar estas variables en Vercel en lugar de dejarlas en el código.
+if (!$db_url) {
+    $db_url = 'postgresql://neondb_owner:npg_l4K9jtfmSGxz@ep-cold-fog-adlo3tve-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require';
+}
+
+// Variables para la conexión
+$host = "";
+$port = "";
+$user = "";
+$pass = "";
+$dbname = "";
+$sslmode = "require"; // Neon/Vercel requiere SSL
+
+if ($db_url) {
+    // A) Si tenemos una URL completa (Lo más habitual en Vercel)
+    $db_opts = parse_url($db_url);
+    
+    $host = $db_opts["host"];
+    $port = isset($db_opts["port"]) ? $db_opts["port"] : "5432";
+    $user = $db_opts["user"];
+    $pass = $db_opts["pass"];
+    $dbname = ltrim($db_opts["path"], '/'); // Quitamos la barra inicial '/'
+    
+} else {
+    // B) Si no hay URL, intentamos usar las variables sueltas (PGHOST, PGUSER...)
+    $host = getenv('PGHOST');
+    $user = getenv('PGUSER');
+    $pass = getenv('PGPASSWORD');
+    $dbname = getenv('PGDATABASE');
+    $port = "5432";
+    
+    if (!$host || !$user) {
+        die("Error Crítico: No se encontraron variables de entorno para la base de datos (POSTGRES_URL, DATABASE_URL o PGHOST).");
+    }
+}
 
 try {
-    // 3. Creamos la conexión usando PDO (el estándar para Postgres)
-    $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
+    // 2. Construimos el DSN (Data Source Name) para PostgreSQL
+    // Añadimos sslmode=require porque Neon/Vercel lo obligan
+    $dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=$sslmode";
     
-    // Usamos la variable $link para intentar mantener compatibilidad con tu código
+    // 3. Crear la conexión PDO
     $link = new PDO($dsn, $user, $pass);
     
-    // Configuración de errores y codificación
+    // 4. Configuración de opciones
     $link->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $link->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC); // Por defecto fetch asociativo
     $link->exec("SET NAMES 'UTF8'");
 
 } catch (PDOException $e) {
-    echo "Error conectando a la base de datos: " . $e->getMessage();
+    // En producción, no es recomendable mostrar la contraseña en el error, pero sí el mensaje
+    echo "Error de conexión a la Base de Datos: " . $e->getMessage();
     die();
 }
 ?>
