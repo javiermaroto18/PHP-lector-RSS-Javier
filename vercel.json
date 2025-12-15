@@ -1,0 +1,15 @@
+{
+  "functions": {
+    "api/*.php": { "runtime": "vercel-php@0.6.0" },
+    "*.php": { "runtime": "vercel-php@0.6.0" }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.php"
+    }
+  ],
+  "env": {
+    "PHP_INI_SCAN_DIR": "/vercel/path0/php-ini"
+  }
+}
