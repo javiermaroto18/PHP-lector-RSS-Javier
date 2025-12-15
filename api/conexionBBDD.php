@@ -2,7 +2,7 @@
 $Repit = false;
 
 // Conectar a PostgreSQL usando la URL completa
-$link = pg_connect('postgresql://neondb_owner:npg_n7V4BuqFEJZM@ep-lively-mouse-a4jorg4h-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require');
+$link = pg_connect('postgresql://neondb_owner:npg_l4K9jtfmSGxz@ep-cold-fog-adlo3tve-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require');
 
 // Verificar conexión
 if (!$link) {
