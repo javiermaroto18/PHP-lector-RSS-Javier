@@ -2,7 +2,32 @@
 require_once "conexionRSS.php";
 
 $sXML = download("http://ep00.epimg.net/rss/elpais/portada.xml");
-$oXML = new SimpleXMLElement($sXML);
+
+// Intentar HTTPS si HTTP falla
+if (!$sXML) {
+    $sXML = download("https://ep00.epimg.net/rss/elpais/portada.xml");
+}
+
+// Si sigue vacío, abortar con mensaje claro
+if (!$sXML) {
+    error_log("RSSElPais: no se pudo descargar el feed de El País (vacío)");
+    echo "Error: no se pudo descargar el feed de El País.";
+    exit;
+}
+
+// Parsear XML con manejo de errores
+libxml_use_internal_errors(true);
+try {
+    $oXML = new SimpleXMLElement($sXML);
+} catch (Exception $e) {
+    $errors = libxml_get_errors();
+    foreach ($errors as $err) {
+        error_log("RSSElPais XML error: " . trim($err->message));
+    }
+    libxml_clear_errors();
+    echo "Error: el feed descargado no contiene XML válido.";
+    exit;
+}
 
 require_once "conexionBBDD.php";
 
