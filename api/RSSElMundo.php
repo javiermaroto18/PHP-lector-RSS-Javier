@@ -67,8 +67,8 @@ if (pg_connection_status($link) !== PGSQL_CONNECTION_OK) {
             $imagenFinal = pg_escape_string($link, $imagen);
 
             // Insertar en la tabla especificando columnas (sin cod, se autogenera)
-            $sql = "INSERT INTO elmundo (titulo, link, descripcion, categoria, fpubli, contenido, imagen) 
-                    VALUES ('$titulo', '$linkNoticia', '$descripcion', '$categoriaFinal', '$fecha', '$contenido', '$imagenFinal')";
+            $sql = "INSERT INTO elmundo (titulo, link, descripcion, categoria, fpubli, contenido) 
+                    VALUES ('$titulo', '$linkNoticia', '$descripcion', '$categoriaFinal', '$fecha', '$contenido')";
 
             $result = pg_query($link, $sql);
 
