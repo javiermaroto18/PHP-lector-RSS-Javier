@@ -1,92 +1,99 @@
 <?php
+
 require_once "conexionRSS.php";
 
-// Descargamos el XML
+// Descargar feed (intenta HTTP/HTTPS)
 $sXML = download("https://e00-elmundo.uecdn.es/elmundo/rss/espana.xml");
-$oXML = new SimpleXMLElement($sXML);
+if (!$sXML) {
+    $sXML = download("http://e00-elmundo.uecdn.es/elmundo/rss/espana.xml");
+}
+
+if (!$sXML) {
+    error_log("RSSElMundo: no se pudo descargar el feed de El Mundo");
+    echo "Error: no se pudo descargar el feed de El Mundo.";
+    exit;
+}
+
+libxml_use_internal_errors(true);
+try {
+    $oXML = new SimpleXMLElement($sXML);
+} catch (Exception $e) {
+    $errs = libxml_get_errors();
+    foreach ($errs as $err) {
+        error_log("RSSElMundo XML: " . trim($err->message));
+    }
+    libxml_clear_errors();
+    echo "Error: feed XML inválido.";
+    exit;
+}
 
 require_once "conexionBBDD.php";
 
-// Verificamos si la conexión PDO ($link) existe
-if (!isset($link)) {
-    printf("Conexión a la base de datos ha fallado");
-} else {
+if (!isset($link) || !($link instanceof PDO)) {
+    error_log("RSSElMundo: conexión PDO no disponible");
+    echo "Error: conexión a la base de datos no disponible.";
+    exit;
+}
 
-    // --- AUTO-CONFIGURACIÓN DE TABLA (Solo para Vercel) ---
-    // Creamos la tabla 'elmundo' si no existe, adaptada a Postgres
-    try {
-        $sqlCreateTable = "CREATE TABLE IF NOT EXISTS elmundo (
-            id SERIAL PRIMARY KEY,
-            titulo TEXT,
-            link TEXT UNIQUE,
-            descripcion TEXT,
-            categoria TEXT,
-            fPubli DATE,
-            guid TEXT
-        )";
-        $link->exec($sqlCreateTable);
-    } catch (PDOException $e) {
-        // Si falla la creación, continuamos (puede que ya exista)
-    }
-    // -----------------------------------------------------
+// Crear tabla si no existe
+try {
+    $sqlCreate = "CREATE TABLE IF NOT EXISTS elmundo (
+        id SERIAL PRIMARY KEY,
+        titulo TEXT,
+        link TEXT UNIQUE,
+        descripcion TEXT,
+        categoria TEXT,
+        fpubli DATE,
+        contenido TEXT
+    )";
+    $link->exec($sqlCreate);
+} catch (PDOException $e) {
+    error_log("RSSElMundo crear tabla: " . $e->getMessage());
+}
 
-    $contador = 0;
-    $categoriaLista = ["Política", "Deportes", "Ciencia", "España", "Economía", "Música", "Cine", "Europa", "Justicia"];
+$categoriaLista = ["Política","Deportes","Ciencia","España","Economía","Música","Cine","Europa","Justicia"];
+
+foreach ($oXML->channel->item as $item) {
     $categoriaFiltro = "";
-
-    foreach ($oXML->channel->item as $item) {
-
-        // Extraer namespaces para media
-        $media = $item->children("media", true);
-        $description = (string)$media->description;
-        // Si no hay descripción en media, intentamos coger la normal
-        if (empty($description)) {
-            $description = (string)$item->description;
-        }
-
-        // Lógica de Categorías
+    if (isset($item->category)) {
         for ($i = 0; $i < count($item->category); $i++) {
-            for ($j = 0; $j < count($categoriaLista); $j++) {
-                if ((string)$item->category[$i] == $categoriaLista[$j]) {
-                    $categoriaFiltro = "[" . $categoriaLista[$j] . "]" . $categoriaFiltro;
+            $cat = (string)$item->category[$i];
+            foreach ($categoriaLista as $c) {
+                if ($cat === $c) {
+                    $categoriaFiltro = "[" . $c . "]" . $categoriaFiltro;
                 }
             }
         }
+    }
 
-        $fPubli = strtotime($item->pubDate);
-        $new_fPubli = date('Y-m-d', $fPubli);
-        $linkNoticia = (string)$item->link;
+    $titulo = (string)$item->title;
+    $linkNoticia = (string)$item->link;
+    // media description fallback
+    $media = $item->children("media", true);
+    $description = $media ? (string)$media->description : (string)$item->description;
+    $fPubli = isset($item->pubDate) ? date('Y-m-d', strtotime((string)$item->pubDate)) : null;
+    $contenido = isset($item->guid) ? (string)$item->guid : '';
 
-        // --- CAMBIO A PDO Y OPTIMIZACIÓN ---
-        // En lugar de traer TODOS los links y comparar con PHP (lento), 
-        // preguntamos a la BBDD si este link específico ya existe.
-        
+    try {
         $sqlCheck = "SELECT COUNT(*) FROM elmundo WHERE link = :link";
         $stmt = $link->prepare($sqlCheck);
         $stmt->execute([':link' => $linkNoticia]);
-        $existe = $stmt->fetchColumn();
+        $count = $stmt->fetchColumn();
 
-        if ($existe == 0 && $categoriaFiltro != "") {
-            // INSERT usando Prepared Statements (Seguro contra comillas ' )
-            try {
-                $sqlInsert = "INSERT INTO elmundo (titulo, link, descripcion, categoria, fPubli, guid) 
-                              VALUES (:titulo, :link, :descripcion, :categoria, :fPubli, :guid)";
-                
-                $stmtInsert = $link->prepare($sqlInsert);
-                $stmtInsert->execute([
-                    ':titulo' => (string)$item->title,
-                    ':link' => $linkNoticia,
-                    ':descripcion' => $description,
-                    ':categoria' => $categoriaFiltro,
-                    ':fPubli' => $new_fPubli,
-                    ':guid' => (string)$item->guid
-                ]);
-            } catch (PDOException $e) {
-                // Ignoramos errores de duplicados si ocurren
-            }
+        if ($count == 0 && $categoriaFiltro !== "") {
+            $sqlInsert = "INSERT INTO elmundo (titulo, link, descripcion, categoria, fpubli, contenido)
+                          VALUES (:titulo, :link, :descripcion, :categoria, :fpubli, :contenido)";
+            $stmtIns = $link->prepare($sqlInsert);
+            $stmtIns->execute([
+                ':titulo' => $titulo,
+                ':link' => $linkNoticia,
+                ':descripcion' => $description,
+                ':categoria' => $categoriaFiltro,
+                ':fpubli' => $fPubli,
+                ':contenido' => $contenido
+            ]);
         }
-        
-        $categoriaFiltro = "";
+    } catch (PDOException $e) {
+        error_log("RSSElMundo DB error: " . $e->getMessage());
     }
 }
-?>
