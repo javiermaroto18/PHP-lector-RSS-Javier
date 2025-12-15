@@ -4,9 +4,9 @@ require_once "conexionRSS.php";
 require_once "conexionBBDD.php";
 
 // Descargar feed (intenta HTTP y HTTPS)
-$sXML = download("http://ep00.epimg.net/rss/elpais/portada.xml");
+$sXML = download("https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada");
 if (!$sXML) {
-    $sXML = download("https://ep00.epimg.net/rss/elpais/portada.xml");
+    $sXML = download("https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada");
 }
 
 if (!$sXML) {
